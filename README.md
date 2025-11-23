@@ -1,4 +1,4 @@
-# 🚀 YOLOv8 Advanced Object Detection & Tracking System
+# 🚀 CV-Advanced Object Detection & Tracking System
 
 Расширенная система детектирования и трекинга объектов с использованием YOLOv8, оптимизированная для RTX 3060.
 
