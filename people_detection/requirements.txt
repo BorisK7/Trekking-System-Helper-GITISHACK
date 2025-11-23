@@ -1,0 +1,11 @@
+# YOLOv8 и зависимости
+ultralytics>=8.0.0
+opencv-python>=4.8.0
+numpy>=1.24.0
+scipy>=1.10.0
+
+# PyTorch с CUDA 11.8 для RTX 3060
+# Установка: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+torch>=2.0.0
+torchvision>=0.15.0
+torchaudio>=2.0.0
