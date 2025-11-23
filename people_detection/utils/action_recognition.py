@@ -1,6 +1,6 @@
 import numpy as np
 from collections import deque
-import math
+from .geometry import calculate_angle
 
 class ActionRecognizer:
     """
@@ -86,12 +86,12 @@ class ActionRecognizer:
         
         # Проверяем уверенность точек ног
         if l_hip[2] > 0.5 and l_knee[2] > 0.5 and l_ankle[2] > 0.5:
-            angle_l = self._calculate_angle(l_hip, l_knee, l_ankle)
+            angle_l = calculate_angle(l_hip, l_knee, l_ankle)
             if angle_l < self.sit_knee_angle:
                 return "sitting", 0.8
         
         if r_hip[2] > 0.5 and r_knee[2] > 0.5 and r_ankle[2] > 0.5:
-            angle_r = self._calculate_angle(r_hip, r_knee, r_ankle)
+            angle_r = calculate_angle(r_hip, r_knee, r_ankle)
             if angle_r < self.sit_knee_angle:
                 return "sitting", 0.8
 
@@ -108,20 +108,6 @@ class ActionRecognizer:
 
         # 4. STANDING (Стояние - по умолчанию)
         return "standing", 0.5
-
-    def _calculate_angle(self, a, b, c):
-        """Расчет угла между тремя точками (в градусах)"""
-        a = np.array(a[:2])
-        b = np.array(b[:2]) # вершина угла
-        c = np.array(c[:2])
-        
-        ba = a - b
-        bc = c - b
-        
-        cosine_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc) + 1e-6)
-        angle = np.arccos(np.clip(cosine_angle, -1.0, 1.0))
-        
-        return np.degrees(angle)
     
     def cleanup(self, active_track_ids):
         """Удаление данных потерянных треков"""

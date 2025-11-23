@@ -204,6 +204,19 @@ def parse_arguments():
         help='Включить детекцию поз (скелетов)'
     )
     
+    parser.add_argument(
+        '--dynamic-only',
+        action='store_true',
+        help='Показывать только динамические (движущиеся) объекты'
+    )
+    
+    parser.add_argument(
+        '--motion-threshold',
+        type=float,
+        default=5.0,
+        help='Порог движения для определения динамических объектов (пикселей, по умолчанию: 5.0)'
+    )
+    
     return parser.parse_args()
 
 
@@ -228,10 +241,8 @@ def validate_arguments(args):
     
     # Если нет вывода и нет отображения - предупреждение
     if args.no_display and args.output is None:
-        logger.warning("Внимание: результат не будет отображаться и не будет сохранен!")
-        response = input("Продолжить? (y/n): ")
-        if response.lower() != 'y':
-            return False
+        logger.warning("Внимание: результат не будет отображаться и не будет сохранен! (Режим производительности)")
+        # Продолжаем без блокировки, так как это может быть автоматический запуск
     
     return True
 
@@ -304,6 +315,9 @@ def main():
         if args.export_data:
             logger.info(f"  Экспорт данных: ВКЛ ({args.export_dir})")
         
+        if args.dynamic_only:
+            logger.info(f"  Режим: ТОЛЬКО ДИНАМИЧЕСКИЕ ОБЪЕКТЫ (порог: {args.motion_threshold} пикселей)")
+        
         print()
         
         # Создание процессора
@@ -318,7 +332,9 @@ def main():
             enable_export=args.export_data,
             enable_pose=args.pose_detection,
             enable_actions=args.action_recognition,
-            use_adaptive_tracking=args.adaptive_tracking
+            use_adaptive_tracking=args.adaptive_tracking,
+            dynamic_only=args.dynamic_only,
+            motion_threshold=args.motion_threshold
         )
         
         # Обработка видео

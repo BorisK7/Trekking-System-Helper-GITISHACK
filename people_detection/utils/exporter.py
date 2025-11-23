@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional, Union, Tuple
 
 from .analytics import SceneAnalytics
+from .common import unpack_track
 
 
 class DataExporter:
@@ -30,18 +31,6 @@ class DataExporter:
         self.frame_data: List[Dict[str, Any]] = []
         self.statistics: Dict[str, Any] = {}
     
-    def _unpack_track(self, track):
-        """Вспомогательный метод для распаковки трека разной длины"""
-        if len(track) == 8:
-             track_id, x1, y1, x2, y2, class_id, conf, state = track
-             return track_id, x1, y1, x2, y2, class_id, conf
-        elif len(track) == 7:
-             track_id, x1, y1, x2, y2, class_id, conf = track
-             return track_id, x1, y1, x2, y2, class_id, conf
-        else:
-             # Fallback
-             return track[0], track[1], track[2], track[3], track[4], track[5], track[6]
-
     def add_frame_data(self, 
                        frame_number: int, 
                        timestamp: float, 
@@ -60,7 +49,7 @@ class DataExporter:
         }
         
         for track in tracked_objects:
-            track_id, x1, y1, x2, y2, class_id, conf = self._unpack_track(track)
+            track_id, x1, y1, x2, y2, class_id, conf, state = unpack_track(track)
             
             cx = (x1 + x2) / 2
             cy = (y1 + y2) / 2
@@ -74,9 +63,9 @@ class DataExporter:
                 'confidence': float(conf)
             }
             
-            # Получаем состояние (если есть)
-            if len(track) == 8:
-                obj_data['state'] = track[7]
+            # Добавляем состояние
+            if state != 'UNKNOWN':
+                obj_data['state'] = state
 
             # Добавляем действие, если есть
             if actions and track_id in actions:

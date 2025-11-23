@@ -17,6 +17,7 @@ from .visualizer import TrajectoryVisualizer, HeatMapVisualizer, ZoneVisualizer,
 from .distance import DistanceEstimator
 from .exporter import DataExporter
 from .action_recognition import ActionRecognizer
+from .dynamic_filter import DynamicObjectFilter
 
 
 # Настройка логирования
@@ -33,7 +34,7 @@ class VideoProcessorAdvanced:
     def __init__(self, model_name='yolov8m', conf_threshold=0.5, iou_threshold=0.45, classes=None,
                  enable_tracking=True, enable_analytics=True, enable_export=False,
                  enable_pose=False, enable_actions=False, use_adaptive_tracking=False,
-                 imgsz=640): # Добавлен параметр imgsz
+                 imgsz=640, dynamic_only=False, motion_threshold=5.0): # Добавлены параметры
         """
         Инициализация процессора
         """
@@ -47,6 +48,8 @@ class VideoProcessorAdvanced:
         self.enable_actions = enable_actions
         self.use_adaptive_tracking = use_adaptive_tracking
         self.imgsz = imgsz # Размер инференса
+        self.dynamic_only = dynamic_only
+        self.motion_threshold = motion_threshold
         
         if self.enable_actions:
             self.enable_pose = True
@@ -106,6 +109,7 @@ class VideoProcessorAdvanced:
         self.distance_estimator = None
         self.exporter = None
         self.action_recognizer = None
+        self.dynamic_filter = None
         
         self.traj_visualizer = TrajectoryVisualizer()
         self.heatmap_visualizer = HeatMapVisualizer()
@@ -159,6 +163,14 @@ class VideoProcessorAdvanced:
             self.action_recognizer = ActionRecognizer()
             logger.info("Распознавание действий: ВКЛЮЧЕНО")
         
+        if self.dynamic_only:
+            self.dynamic_filter = DynamicObjectFilter(
+                movement_threshold=self.motion_threshold,
+                history_length=10,
+                min_frames_to_confirm=3
+            )
+            logger.info(f"Фильтр динамических объектов: ВКЛЮЧЕН (порог: {self.motion_threshold} пикселей)")
+        
         if self.enable_export:
             analytics_dir = run_dir / 'analytics'
             self.exporter = DataExporter(output_dir=analytics_dir)
@@ -201,8 +213,16 @@ class VideoProcessorAdvanced:
                     track_keypoints = {}
                     
                     tracked_objects = []
+                    motion_classifications = {}
+                    
                     if self.enable_tracking and self.tracker:
                         tracked_objects = self.tracker.update(detections, frame_time)
+                        
+                        # Фильтрация динамических объектов
+                        if self.dynamic_only and self.dynamic_filter:
+                            tracked_objects, motion_classifications = self.dynamic_filter.update(
+                                tracked_objects, frame_time
+                            )
                         
                         if self.enable_pose and len(keypoints_data) > 0:
                             self._match_keypoints_to_tracks(tracked_objects, detections, keypoints_data, track_keypoints)
@@ -265,7 +285,8 @@ class VideoProcessorAdvanced:
                             display_frame = self.traj_visualizer.draw_trajectories(display_frame, self.tracker)
                         
                         display_frame = self.traj_visualizer.draw_track_info(
-                            display_frame, tracked_objects, self.tracker, actions=current_actions, show_state=self.use_adaptive_tracking
+                            display_frame, tracked_objects, self.tracker, actions=current_actions, 
+                            show_state=self.use_adaptive_tracking, motion_classifications=motion_classifications
                         )
                     
                     if show_heatmap and self.enable_analytics and self.analytics:

@@ -9,6 +9,7 @@ from .analytics import SceneAnalytics, OccupancyAnalyzer
 from .visualizer import TrajectoryVisualizer, HeatMapVisualizer, ZoneVisualizer, StatisticsOverlay
 from .distance import DistanceEstimator
 from .exporter import DataExporter
+from .dynamic_filter import DynamicObjectFilter
 
 __all__ = [
     'VideoProcessor',
@@ -22,5 +23,6 @@ __all__ = [
     'ZoneVisualizer',
     'StatisticsOverlay',
     'DistanceEstimator',
-    'DataExporter'
+    'DataExporter',
+    'DynamicObjectFilter'
 ]

@@ -5,6 +5,9 @@
 import numpy as np
 import cv2
 from collections import defaultdict, deque
+from .config import Config
+from .geometry import point_in_polygon, point_side_of_line, boxes_overlap_iou
+from .common import unpack_track
 
 
 class SceneAnalytics:
@@ -35,18 +38,6 @@ class SceneAnalytics:
         # Линии подсчета (для входа/выхода)
         self.counting_lines = {}  # {line_id: {'start': (x,y), 'end': (x,y), 'crossed': set()}}
         
-    def _unpack_track(self, track):
-        """Вспомогательный метод для распаковки трека разной длины"""
-        if len(track) == 8:
-             track_id, x1, y1, x2, y2, class_id, conf, state = track
-             return track_id, x1, y1, x2, y2, class_id, conf
-        elif len(track) == 7:
-             track_id, x1, y1, x2, y2, class_id, conf = track
-             return track_id, x1, y1, x2, y2, class_id, conf
-        else:
-             # Fallback
-             return track[0], track[1], track[2], track[3], track[4], track[5], track[6]
-
     def update_heat_map(self, tracked_objects):
         """
         Обновление heat map на основе позиций объектов
@@ -56,7 +47,7 @@ class SceneAnalytics:
         
         # Добавление текущих позиций
         for track in tracked_objects:
-            track_id, x1, y1, x2, y2, class_id, conf = self._unpack_track(track)
+            track_id, x1, y1, x2, y2, class_id, conf, _ = unpack_track(track)
             
             cx = int((x1 + x2) / 2)
             cy = int((y1 + y2) / 2)
@@ -114,7 +105,6 @@ class SceneAnalytics:
         """
         Обновление статистики по зонам
         """
-        from .config import Config
         
         # Сброс счетчиков
         for zone in self.zones.values():
@@ -124,37 +114,17 @@ class SceneAnalytics:
         
         # Проверка объектов в зонах
         for track in tracked_objects:
-            track_id, x1, y1, x2, y2, class_id, conf = self._unpack_track(track)
+            track_id, x1, y1, x2, y2, class_id, conf, _ = unpack_track(track)
             
             cx = int((x1 + x2) / 2)
             cy = int((y1 + y2) / 2)
             
             for zone_id, zone in self.zones.items():
-                if self._point_in_polygon((cx, cy), zone['polygon']):
+                if point_in_polygon((cx, cy), zone['polygon']):
                     zone['count'] += 1
                     class_name = Config.COCO_CLASSES.get(class_id, 'unknown')
                     zone['class_counts'][class_name] += 1
                     zone['track_ids'].add(track_id)
-    
-    def _point_in_polygon(self, point, polygon):
-        """Проверка нахождения точки в полигоне (ray casting algorithm)"""
-        x, y = point
-        n = len(polygon)
-        inside = False
-        
-        p1x, p1y = polygon[0]
-        for i in range(1, n + 1):
-            p2x, p2y = polygon[i % n]
-            if y > min(p1y, p2y):
-                if y <= max(p1y, p2y):
-                    if x <= max(p1x, p2x):
-                        if p1y != p2y:
-                            xinters = (y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
-                        if p1x == p2x or x <= xinters:
-                            inside = not inside
-            p1x, p1y = p2x, p2y
-        
-        return inside
     
     def define_counting_line(self, line_id, start, end):
         """
@@ -173,14 +143,14 @@ class SceneAnalytics:
         Обновление подсчета пересечений линий
         """
         for track in tracked_objects:
-            track_id, x1, y1, x2, y2, class_id, conf = self._unpack_track(track)
+            track_id, x1, y1, x2, y2, class_id, conf, _ = unpack_track(track)
             
             cx = int((x1 + x2) / 2)
             cy = int((y1 + y2) / 2)
             
             for line_id, line in self.counting_lines.items():
                 # Определение положения относительно линии
-                position = self._point_side_of_line((cx, cy), line['start'], line['end'])
+                position = point_side_of_line((cx, cy), line['start'], line['end'])
                 
                 # Проверка пересечения
                 if track_id in line['prev_positions']:
@@ -192,22 +162,10 @@ class SceneAnalytics:
                 
                 line['prev_positions'][track_id] = position
     
-    def _point_side_of_line(self, point, line_start, line_end):
-        """Определение на какой стороне линии находится точка"""
-        x, y = point
-        x1, y1 = line_start
-        x2, y2 = line_end
-        
-        # Векторное произведение
-        d = (x - x1) * (y2 - y1) - (y - y1) * (x2 - x1)
-        
-        return 'above' if d > 0 else 'below'
-    
     def update_timeline(self, timestamp, tracked_objects):
         """
         Обновление временной статистики
         """
-        from .config import Config
         
         self.timeline['timestamps'].append(timestamp)
         self.timeline['total_objects'].append(len(tracked_objects))
@@ -215,7 +173,7 @@ class SceneAnalytics:
         # Подсчет по классам
         class_counts = defaultdict(int)
         for track in tracked_objects:
-            _, _, _, _, _, class_id, _ = self._unpack_track(track)
+            _, _, _, _, _, class_id, _, _ = unpack_track(track)
             class_name = Config.COCO_CLASSES.get(class_id, 'unknown')
             class_counts[class_name] += 1
         
@@ -277,26 +235,17 @@ class OccupancyAnalyzer:
         
         # Проверка пересечений людей с мебелью
         for person_track in people_detections:
-            # Ручная распаковка или использование хелпера, но здесь проще по индексу так как это другой класс
-            if len(person_track) >= 7:
-                 px1, py1, px2, py2 = person_track[1:5]
-            else:
-                 continue # Should not happen
-                 
+            # Используем unpack_track для стандартизации
+            _, px1, py1, px2, py2, _, _, _ = unpack_track(person_track)
             person_bbox = (px1, py1, px2, py2)
             
             for furn_track in furniture_detections:
                 # Аналогично для мебели
-                if len(furn_track) >= 7:
-                    furn_id = furn_track[0]
-                    fx1, fy1, fx2, fy2 = furn_track[1:5]
-                else:
-                    continue
-                    
+                furn_id, fx1, fy1, fx2, fy2, _, _, _ = unpack_track(furn_track)
                 furn_bbox = (fx1, fy1, fx2, fy2)
                 
                 # Проверка пересечения
-                if self._boxes_overlap(person_bbox, furn_bbox, threshold=0.3):
+                if boxes_overlap_iou(person_bbox, furn_bbox) >= 0.3:
                     # Мебель занята
                     if furn_id in self.occupancy_status:
                         self.occupancy_status[furn_id] = True
@@ -304,32 +253,6 @@ class OccupancyAnalyzer:
         # Сохранение истории
         for obj_id, status in self.occupancy_status.items():
             self.occupancy_history[obj_id].append(status)
-    
-    def _boxes_overlap(self, box1, box2, threshold=0.3):
-        """Проверка пересечения боксов с порогом"""
-        x1_1, y1_1, x2_1, y2_1 = box1
-        x1_2, y1_2, x2_2, y2_2 = box2
-        
-        # Пересечение
-        xi1 = max(x1_1, x1_2)
-        yi1 = max(y1_1, y1_2)
-        xi2 = min(x2_1, x2_2)
-        yi2 = min(y2_1, y2_2)
-        
-        inter_area = max(0, xi2 - xi1) * max(0, yi2 - yi1)
-        
-        # Площадь меньшего бокса
-        box1_area = (x2_1 - x1_1) * (y2_1 - y1_1)
-        box2_area = (x2_2 - x1_2) * (y2_2 - y1_2)
-        smaller_area = min(box1_area, box2_area)
-        
-        if smaller_area == 0:
-            return False
-        
-        # Доля пересечения
-        overlap_ratio = inter_area / smaller_area
-        
-        return overlap_ratio >= threshold
     
     def get_occupancy_rate(self):
         """Получение процента занятости"""
@@ -357,3 +280,4 @@ class OccupancyAnalyzer:
             'free': free,
             'occupancy_rate': self.get_occupancy_rate()
         }
+

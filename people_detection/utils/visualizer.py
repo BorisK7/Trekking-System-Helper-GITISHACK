@@ -5,6 +5,7 @@
 import cv2
 import numpy as np
 from .config import Config
+from .common import unpack_track
 
 
 class TrajectoryVisualizer:
@@ -96,17 +97,13 @@ class TrajectoryVisualizer:
         cv2.line(frame, pt2, arrow_pt1, color, thickness)
         cv2.line(frame, pt2, arrow_pt2, color, thickness)
     
-    def draw_track_info(self, frame, tracked_objects, tracker, show_speed=True, show_id=True, actions=None, show_state=True):
+    def draw_track_info(self, frame, tracked_objects, tracker, show_speed=True, show_id=True, actions=None, show_state=True, motion_classifications=None):
         """
         Отрисовка информации о треках с поддержкой состояний
         """
         for item in tracked_objects:
             # Распаковка может отличаться в зависимости от трекера
-            if len(item) == 8:
-                track_id, x1, y1, x2, y2, class_id, conf, state = item
-            else:
-                track_id, x1, y1, x2, y2, class_id, conf = item
-                state = 'UNKNOWN'
+            track_id, x1, y1, x2, y2, class_id, conf, state = unpack_track(item)
 
             # Цвет рамки зависит от состояния
             color = self.get_state_color(state)
@@ -124,7 +121,14 @@ class TrajectoryVisualizer:
             class_name = Config.COCO_CLASSES.get(class_id, 'unknown')
             info_lines = []
             
-            if actions and track_id in actions:
+            # Классификация движения (приоритет над действиями)
+            if motion_classifications and track_id in motion_classifications:
+                motion_info = motion_classifications[track_id]
+                motion_type = motion_info['motion_type'].replace('_', ' ').title()
+                speed = motion_info['speed_px_s']
+                info_lines.append(f"MOTION: {motion_type}")
+                info_lines.append(f"Speed: {speed:.1f}px/s")
+            elif actions and track_id in actions:
                 action_label, action_conf = actions[track_id]
                 if action_label != "unknown":
                     info_lines.append(f"ACT: {action_label.upper()} ({action_conf:.2f})")
