@@ -35,18 +35,29 @@ class SceneAnalytics:
         # Линии подсчета (для входа/выхода)
         self.counting_lines = {}  # {line_id: {'start': (x,y), 'end': (x,y), 'crossed': set()}}
         
+    def _unpack_track(self, track):
+        """Вспомогательный метод для распаковки трека разной длины"""
+        if len(track) == 8:
+             track_id, x1, y1, x2, y2, class_id, conf, state = track
+             return track_id, x1, y1, x2, y2, class_id, conf
+        elif len(track) == 7:
+             track_id, x1, y1, x2, y2, class_id, conf = track
+             return track_id, x1, y1, x2, y2, class_id, conf
+        else:
+             # Fallback
+             return track[0], track[1], track[2], track[3], track[4], track[5], track[6]
+
     def update_heat_map(self, tracked_objects):
         """
         Обновление heat map на основе позиций объектов
-        
-        Args:
-            tracked_objects: [(track_id, x1, y1, x2, y2, class_id, conf), ...]
         """
         # Затухание предыдущего heat map
         self.heat_map *= self.heat_decay
         
         # Добавление текущих позиций
-        for track_id, x1, y1, x2, y2, class_id, conf in tracked_objects:
+        for track in tracked_objects:
+            track_id, x1, y1, x2, y2, class_id, conf = self._unpack_track(track)
+            
             cx = int((x1 + x2) / 2)
             cy = int((y1 + y2) / 2)
             
@@ -78,12 +89,6 @@ class SceneAnalytics:
     def get_heat_map_overlay(self, alpha=0.5):
         """
         Получение heat map как цветного overlay для визуализации
-        
-        Args:
-            alpha: Прозрачность (0-1)
-            
-        Returns:
-            BGR изображение heat map
         """
         # Нормализация
         normalized = self.heat_map / (self.heat_map.max() + 1e-6)
@@ -97,10 +102,6 @@ class SceneAnalytics:
     def define_zone(self, zone_id, polygon):
         """
         Определение зоны интереса
-        
-        Args:
-            zone_id: Уникальный идентификатор зоны
-            polygon: Список точек [(x1,y1), (x2,y2), ...]
         """
         self.zones[zone_id] = {
             'polygon': polygon,
@@ -112,9 +113,6 @@ class SceneAnalytics:
     def update_zones(self, tracked_objects):
         """
         Обновление статистики по зонам
-        
-        Args:
-            tracked_objects: [(track_id, x1, y1, x2, y2, class_id, conf), ...]
         """
         from .config import Config
         
@@ -125,7 +123,9 @@ class SceneAnalytics:
             zone['track_ids'].clear()
         
         # Проверка объектов в зонах
-        for track_id, x1, y1, x2, y2, class_id, conf in tracked_objects:
+        for track in tracked_objects:
+            track_id, x1, y1, x2, y2, class_id, conf = self._unpack_track(track)
+            
             cx = int((x1 + x2) / 2)
             cy = int((y1 + y2) / 2)
             
@@ -159,11 +159,6 @@ class SceneAnalytics:
     def define_counting_line(self, line_id, start, end):
         """
         Определение линии подсчета для входа/выхода
-        
-        Args:
-            line_id: Уникальный идентификатор линии
-            start: (x1, y1) начало линии
-            end: (x2, y2) конец линии
         """
         self.counting_lines[line_id] = {
             'start': start,
@@ -176,11 +171,10 @@ class SceneAnalytics:
     def update_counting_lines(self, tracked_objects):
         """
         Обновление подсчета пересечений линий
-        
-        Args:
-            tracked_objects: [(track_id, x1, y1, x2, y2, class_id, conf), ...]
         """
-        for track_id, x1, y1, x2, y2, class_id, conf in tracked_objects:
+        for track in tracked_objects:
+            track_id, x1, y1, x2, y2, class_id, conf = self._unpack_track(track)
+            
             cx = int((x1 + x2) / 2)
             cy = int((y1 + y2) / 2)
             
@@ -212,10 +206,6 @@ class SceneAnalytics:
     def update_timeline(self, timestamp, tracked_objects):
         """
         Обновление временной статистики
-        
-        Args:
-            timestamp: Временная метка (секунды)
-            tracked_objects: [(track_id, x1, y1, x2, y2, class_id, conf), ...]
         """
         from .config import Config
         
@@ -224,7 +214,8 @@ class SceneAnalytics:
         
         # Подсчет по классам
         class_counts = defaultdict(int)
-        for _, _, _, _, _, class_id, _ in tracked_objects:
+        for track in tracked_objects:
+            _, _, _, _, _, class_id, _ = self._unpack_track(track)
             class_name = Config.COCO_CLASSES.get(class_id, 'unknown')
             class_counts[class_name] += 1
         
@@ -265,11 +256,6 @@ class OccupancyAnalyzer:
     def register_furniture(self, object_id, bbox, class_name):
         """
         Регистрация мебели для отслеживания занятости
-        
-        Args:
-            object_id: Уникальный ID объекта
-            bbox: (x1, y1, x2, y2)
-            class_name: Тип объекта ('chair', 'couch', etc.)
         """
         self.furniture_positions[object_id] = {
             'bbox': bbox,
@@ -291,11 +277,22 @@ class OccupancyAnalyzer:
         
         # Проверка пересечений людей с мебелью
         for person_track in people_detections:
-            _, px1, py1, px2, py2, _, _ = person_track
+            # Ручная распаковка или использование хелпера, но здесь проще по индексу так как это другой класс
+            if len(person_track) >= 7:
+                 px1, py1, px2, py2 = person_track[1:5]
+            else:
+                 continue # Should not happen
+                 
             person_bbox = (px1, py1, px2, py2)
             
             for furn_track in furniture_detections:
-                furn_id, fx1, fy1, fx2, fy2, _, _ = furn_track
+                # Аналогично для мебели
+                if len(furn_track) >= 7:
+                    furn_id = furn_track[0]
+                    fx1, fy1, fx2, fy2 = furn_track[1:5]
+                else:
+                    continue
+                    
                 furn_bbox = (fx1, fy1, fx2, fy2)
                 
                 # Проверка пересечения

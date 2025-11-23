@@ -1,4 +1,3 @@
-
 """Детектирование объектов на видео с использованием YOLOv8
 
 Автор: YOLOv8 Object Detection System
@@ -51,8 +50,8 @@ def parse_arguments():
   # Без отображения (только сохранение)
   python main.py --source input/video.mp4 --output output/result.mp4 --no-display
 
-  # С трекингом и траекториями
-  python main.py --source input/video.mp4 --output output/tracked.mp4 --show-trajectories
+  # С умным трекингом (adaptive tracking)
+  python main.py --source input/video.mp4 --adaptive-tracking --show-trajectories
 
   # С heat map и панелью статистики
   python main.py --source input/video.mp4 --show-heatmap --show-stats-panel
@@ -117,9 +116,16 @@ def parse_arguments():
     )
     
     parser.add_argument(
+        '--imgsz',
+        type=int,
+        default=640,
+        help='Размер изображения для инференса (по умолчанию: 640). Увеличьте до 1280 для лучшей детекции мелких объектов.'
+    )
+
+    parser.add_argument(
         '--classes',
         type=str,
-        default='all',
+        default='person,chair',
         help='Классы для детекции: "all" (все), "person" (люди), "person,car" (несколько) или ID классов "0,2,3"'
     )
     
@@ -140,6 +146,12 @@ def parse_arguments():
         action='store_true',
         default=True,
         help='Включить трекинг объектов (по умолчанию)'
+    )
+
+    parser.add_argument(
+        '--adaptive-tracking',
+        action='store_true',
+        help='Включить умный трекинг с поддержкой состояний (STATIC/MOVABLE)'
     )
     
     parser.add_argument(
@@ -178,6 +190,18 @@ def parse_arguments():
         type=str,
         default='output/analytics',
         help='Директория для экспорта данных (по умолчанию: output/analytics)'
+    )
+    
+    parser.add_argument(
+        '--action-recognition',
+        action='store_true',
+        help='Включить распознавание действий (стоя, сидя, бег, падение)'
+    )
+
+    parser.add_argument(
+        '--pose-detection',
+        action='store_true',
+        help='Включить детекцию поз (скелетов)'
     )
     
     return parser.parse_args()
@@ -265,12 +289,12 @@ def main():
         print()
         
         # Определение параметров
-        enable_tracking = args.enable_tracking and not args.no_tracking
+        enable_tracking = (args.enable_tracking or args.adaptive_tracking) and not args.no_tracking
         enable_analytics = enable_tracking  # Аналитика требует трекинга
         
         # Вывод расширенных параметров
         if enable_tracking:
-            logger.info(f"  Трекинг: ВКЛ")
+            logger.info(f"  Трекинг: {'ADAPTIVE' if args.adaptive_tracking else 'STANDARD'}")
             logger.info(f"  Траектории: {'ВКЛ' if args.show_trajectories else 'ВЫКЛ'}")
             logger.info(f"  Heat map: {'ВКЛ' if args.show_heatmap else 'ВЫКЛ'}")
             logger.info(f"  Панель статистики: {'ВКЛ' if args.show_stats_panel else 'ВЫКЛ'}")
@@ -288,9 +312,13 @@ def main():
             conf_threshold=args.conf,
             iou_threshold=args.iou,
             classes=classes,
+            imgsz=args.imgsz,  # Передаем размер изображения
             enable_tracking=enable_tracking,
             enable_analytics=enable_analytics,
-            enable_export=args.export_data
+            enable_export=args.export_data,
+            enable_pose=args.pose_detection,
+            enable_actions=args.action_recognition,
+            use_adaptive_tracking=args.adaptive_tracking
         )
         
         # Обработка видео
@@ -302,7 +330,8 @@ def main():
             show_heatmap=args.show_heatmap and enable_analytics,
             show_stats_panel=args.show_stats_panel and enable_tracking,
             create_floor_projection=enable_tracking,  # Создаем проекцию если трекинг включен
-            projection_output='output/floor_projection.mp4' if args.output else None
+            projection_output='output/floor_projection.mp4' if args.output else None,
+            show_pose=args.pose_detection # Начальное состояние отображения поз
         )
         
         logger.info("Обработка завершена успешно!")

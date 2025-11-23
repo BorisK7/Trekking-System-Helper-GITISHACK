@@ -40,6 +40,15 @@ class Config:
         75: 'vase', 76: 'scissors', 77: 'teddy bear', 78: 'hair drier', 79: 'toothbrush'
     }
     
+    # Категории объектов для анализа состояний
+    MOVABLE_CATEGORIES = {
+        'chair', 'couch', 'bed', 'dining table', 'bench', 'potted plant', 'suitcase', 'backpack'
+    }
+    
+    DYNAMIC_CATEGORIES = {
+        'person', 'cat', 'dog', 'bicycle', 'car', 'motorcycle'
+    }
+    
     # Класс "person" в COCO dataset
     PERSON_CLASS_ID = 0
     
@@ -52,6 +61,14 @@ class Config:
         'electronics': (0, 255, 255), # Желтый - электроника
         'food': (147, 20, 255),     # Розовый - еда
         'default': (0, 200, 200)    # Желто-зеленый - остальное
+    }
+    
+    # Цвета состояний (BGR)
+    STATE_COLORS = {
+        'STATIC': (219, 152, 52),   # #3498db (Синий)
+        'MOVABLE': (18, 156, 243),  # #f39c12 (Желтый/Оранжевый)
+        'DYNAMIC': (113, 204, 46),  # #2ecc71 (Зеленый)
+        'UNKNOWN': (166, 165, 149)  # #95a5a6 (Серый)
     }
     
     # Устройство для вычислений

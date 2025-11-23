@@ -24,26 +24,32 @@ class DataExporter:
             self.output_dir.mkdir(parents=True, exist_ok=True)
         except OSError as e:
             print(f"Ошибка при создании директории {self.output_dir}: {e}")
-            # Fallback to current directory or temp if needed, but for now just log
         
         # Собранные данные
         self.trajectories_data: List[Dict[str, Any]] = []
         self.frame_data: List[Dict[str, Any]] = []
         self.statistics: Dict[str, Any] = {}
     
+    def _unpack_track(self, track):
+        """Вспомогательный метод для распаковки трека разной длины"""
+        if len(track) == 8:
+             track_id, x1, y1, x2, y2, class_id, conf, state = track
+             return track_id, x1, y1, x2, y2, class_id, conf
+        elif len(track) == 7:
+             track_id, x1, y1, x2, y2, class_id, conf = track
+             return track_id, x1, y1, x2, y2, class_id, conf
+        else:
+             # Fallback
+             return track[0], track[1], track[2], track[3], track[4], track[5], track[6]
+
     def add_frame_data(self, 
                        frame_number: int, 
                        timestamp: float, 
                        tracked_objects: List[Tuple], 
-                       analytics: Optional[SceneAnalytics] = None):
+                       analytics: Optional[SceneAnalytics] = None,
+                       actions: Optional[Dict[int, Tuple[str, float]]] = None):
         """
         Добавление данных кадра
-        
-        Args:
-            frame_number: Номер кадра
-            timestamp: Временная метка (сек)
-            tracked_objects: [(track_id, x1, y1, x2, y2, class_id, conf), ...]
-            analytics: SceneAnalytics (опционально)
         """
         from .config import Config
         
@@ -53,7 +59,9 @@ class DataExporter:
             'objects': []
         }
         
-        for track_id, x1, y1, x2, y2, class_id, conf in tracked_objects:
+        for track in tracked_objects:
+            track_id, x1, y1, x2, y2, class_id, conf = self._unpack_track(track)
+            
             cx = (x1 + x2) / 2
             cy = (y1 + y2) / 2
             
@@ -65,6 +73,18 @@ class DataExporter:
                 'center': {'x': float(cx), 'y': float(cy)},
                 'confidence': float(conf)
             }
+            
+            # Получаем состояние (если есть)
+            if len(track) == 8:
+                obj_data['state'] = track[7]
+
+            # Добавляем действие, если есть
+            if actions and track_id in actions:
+                action_label, action_conf = actions[track_id]
+                obj_data['action'] = {
+                    'label': action_label,
+                    'confidence': float(action_conf)
+                }
             
             frame_info['objects'].append(obj_data)
         
@@ -83,12 +103,6 @@ class DataExporter:
                        metadata: Optional[Dict[str, Any]] = None):
         """
         Добавление траектории объекта
-        
-        Args:
-            track_id: ID трека
-            trajectory: [(x, y, timestamp) или (x, y, timestamp, proj_x, proj_y), ...]
-            class_name: Тип объекта
-            metadata: Дополнительные данные {velocity, duration, distance, ...}
         """
         traj_data = {
             'track_id': track_id,
@@ -269,9 +283,10 @@ class DataExporter:
                 f'{base_filename}_uwb_format.csv'
             ))
             
+            # Добавляем копирование видео если требуется (реализовано в main)
+            
         except Exception as e:
             print(f"Ошибка при экспорте: {e}")
-            # Можно добавить логирование traceback здесь
         
         return exported_files
     
