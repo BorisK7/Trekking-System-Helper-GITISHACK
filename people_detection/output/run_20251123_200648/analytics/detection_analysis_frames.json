@@ -1,0 +1,22 @@
+{
+  "export_date": "2025-11-23T20:07:23.107752",
+  "total_frames": 514,
+  "frames": [
+    {
+      "frame": 1,
+      "timestamp": 0.0,
+      "objects": []
+    },
+    {
+      "frame": 2,
+      "timestamp": 0.03333333333333333,
+      "objects": []
+    },
+    {
+      "frame": 3,
+      "timestamp": 0.06666666666666667,
+      "objects": [
+        {
+          "track_id": 1,
+          "class": "chair",
+          "class_id": 

@@ -6,25 +6,36 @@ import json
 import csv
 from pathlib import Path
 from datetime import datetime
+from typing import List, Dict, Any, Optional, Union, Tuple
+
+from .analytics import SceneAnalytics
 
 
 class DataExporter:
     """Экспорт данных в JSON/CSV для анализа и сравнения с UWB"""
     
-    def __init__(self, output_dir='output/analytics'):
+    def __init__(self, output_dir: Union[str, Path] = 'output/analytics'):
         """
         Args:
             output_dir: Директория для сохранения файлов
         """
         self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self.output_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            print(f"Ошибка при создании директории {self.output_dir}: {e}")
+            # Fallback to current directory or temp if needed, but for now just log
         
         # Собранные данные
-        self.trajectories_data = []
-        self.frame_data = []
-        self.statistics = {}
+        self.trajectories_data: List[Dict[str, Any]] = []
+        self.frame_data: List[Dict[str, Any]] = []
+        self.statistics: Dict[str, Any] = {}
     
-    def add_frame_data(self, frame_number, timestamp, tracked_objects, analytics=None):
+    def add_frame_data(self, 
+                       frame_number: int, 
+                       timestamp: float, 
+                       tracked_objects: List[Tuple], 
+                       analytics: Optional[SceneAnalytics] = None):
         """
         Добавление данных кадра
         
@@ -65,13 +76,17 @@ class DataExporter:
         
         self.frame_data.append(frame_info)
     
-    def add_trajectory(self, track_id, trajectory, class_name, metadata=None):
+    def add_trajectory(self, 
+                       track_id: int, 
+                       trajectory: List[Tuple], 
+                       class_name: str, 
+                       metadata: Optional[Dict[str, Any]] = None):
         """
         Добавление траектории объекта
         
         Args:
             track_id: ID трека
-            trajectory: [(x, y, timestamp), ...]
+            trajectory: [(x, y, timestamp) или (x, y, timestamp, proj_x, proj_y), ...]
             class_name: Тип объекта
             metadata: Дополнительные данные {velocity, duration, distance, ...}
         """
@@ -82,20 +97,34 @@ class DataExporter:
             'metadata': metadata or {}
         }
         
-        for x, y, t in trajectory:
-            traj_data['points'].append({
-                'x': float(x),
-                'y': float(y),
-                'timestamp': float(t)
-            })
+        for point in trajectory:
+            # Поддержка разного количества параметров в точке
+            if len(point) >= 5:
+                x, y, t, px, py = point[:5]
+                point_data = {
+                    'x': float(x),
+                    'y': float(y),
+                    'timestamp': float(t),
+                    'proj_x': float(px),
+                    'proj_y': float(py)
+                }
+            else:
+                x, y, t = point[:3]
+                point_data = {
+                    'x': float(x),
+                    'y': float(y),
+                    'timestamp': float(t)
+                }
+            
+            traj_data['points'].append(point_data)
         
         self.trajectories_data.append(traj_data)
     
-    def set_statistics(self, stats):
+    def set_statistics(self, stats: Dict[str, Any]):
         """Установка общей статистики"""
         self.statistics = stats
     
-    def export_trajectories_json(self, filename='trajectories.json'):
+    def export_trajectories_json(self, filename: str = 'trajectories.json') -> Path:
         """Экспорт траекторий в JSON"""
         output_file = self.output_dir / filename
         
@@ -110,30 +139,50 @@ class DataExporter:
         
         return output_file
     
-    def export_trajectories_csv(self, filename='trajectories.csv'):
+    def export_trajectories_csv(self, filename: str = 'trajectories.csv') -> Path:
         """Экспорт траекторий в CSV (формат для сравнения с UWB)"""
         output_file = self.output_dir / filename
         
         with open(output_file, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            writer.writerow(['track_id', 'class', 'x', 'y', 'timestamp'])
+            
+            # Определяем заголовки на основе данных
+            headers = ['track_id', 'class', 'x', 'y', 'timestamp']
+            has_projection = False
+            
+            # Проверяем наличие проекции в первой точке любой траектории
+            for traj in self.trajectories_data:
+                if traj['points'] and 'proj_x' in traj['points'][0]:
+                    headers.extend(['proj_x', 'proj_y'])
+                    has_projection = True
+                    break
+            
+            writer.writerow(headers)
             
             for traj in self.trajectories_data:
                 track_id = traj['track_id']
                 class_name = traj['class']
                 
                 for point in traj['points']:
-                    writer.writerow([
+                    row = [
                         track_id,
                         class_name,
                         point['x'],
                         point['y'],
                         point['timestamp']
-                    ])
+                    ]
+                    
+                    if has_projection:
+                        row.extend([
+                            point.get('proj_x', ''),
+                            point.get('proj_y', '')
+                        ])
+                        
+                    writer.writerow(row)
         
         return output_file
     
-    def export_frame_data_json(self, filename='frame_data.json'):
+    def export_frame_data_json(self, filename: str = 'frame_data.json') -> Path:
         """Экспорт покадровых данных в JSON"""
         output_file = self.output_dir / filename
         
@@ -148,7 +197,7 @@ class DataExporter:
         
         return output_file
     
-    def export_statistics_json(self, filename='statistics.json'):
+    def export_statistics_json(self, filename: str = 'statistics.json') -> Path:
         """Экспорт статистики в JSON"""
         output_file = self.output_dir / filename
         
@@ -162,7 +211,7 @@ class DataExporter:
         
         return output_file
     
-    def export_for_uwb_comparison(self, filename='uwb_comparison.csv'):
+    def export_for_uwb_comparison(self, filename: str = 'uwb_comparison.csv') -> Path:
         """
         Экспорт данных в формате для сравнения с UWB
         Формат совместимый с walking_path.csv из UWB датасета
@@ -183,14 +232,14 @@ class DataExporter:
                         track_id,
                         point['x'],
                         point['y'],
-                        0.0,  # z (высота) - по умолчанию 0, можно оценить из размера бокса
+                        0.0,  # z (высота) - по умолчанию 0
                         point['timestamp'],
                         class_name
                     ])
         
         return output_file
     
-    def export_all(self, base_filename='detection_analysis'):
+    def export_all(self, base_filename: str = 'detection_analysis') -> Dict[str, str]:
         """Экспорт всех данных"""
         exported_files = {}
         
@@ -222,10 +271,11 @@ class DataExporter:
             
         except Exception as e:
             print(f"Ошибка при экспорте: {e}")
+            # Можно добавить логирование traceback здесь
         
         return exported_files
     
-    def create_summary_report(self, filename='summary.txt'):
+    def create_summary_report(self, filename: str = 'summary.txt') -> Path:
         """Создание текстового отчета"""
         output_file = self.output_dir / filename
         

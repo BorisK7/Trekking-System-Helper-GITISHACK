@@ -7,6 +7,7 @@ import time
 import logging
 import numpy as np
 from pathlib import Path
+from datetime import datetime
 from ultralytics import YOLO
 from .config import Config
 from .tracker import ObjectTracker
@@ -66,6 +67,11 @@ class VideoProcessorAdvanced:
         self.total_detections = 0
         self.class_counts = {}
         
+        # Параметры видео
+        self.video_width = 0
+        self.video_height = 0
+        self.video_fps = 0
+        
         # Модули (инициализируются при обработке видео)
         self.tracker = None
         self.analytics = None
@@ -101,42 +107,61 @@ class VideoProcessorAdvanced:
             return
         
         # Получение параметров видео
-        fps = int(cap.get(cv2.CAP_PROP_FPS))
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        self.video_fps = int(cap.get(cv2.CAP_PROP_FPS))
+        self.video_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.video_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         
-        logger.info(f"Параметры видео: {width}x{height} @ {fps}fps, {total_frames} кадров")
+        logger.info(f"Параметры видео: {self.video_width}x{self.video_height} @ {self.video_fps}fps, {total_frames} кадров")
         
         # Инициализация модулей
+        
+        # Создание директории запуска (run_YYYYMMDD_HHMMSS)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        run_dir = Path('output') / f"run_{timestamp}"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Директория запуска: {run_dir}")
+        
+        # Обновление путей
+        if output_path:
+            output_path = run_dir / Path(output_path).name
+            
+        if create_floor_projection:
+             # Если путь проекции был задан по умолчанию или пользователем, переносим в run_dir
+            if projection_output:
+                projection_output = run_dir / Path(projection_output).name
+            else:
+                projection_output = run_dir / 'floor_projection.mp4'
+            logger.info(f"Проекция на плоскость: {projection_output}")
+
         if self.enable_tracking:
             self.tracker = ObjectTracker(max_age=30, min_hits=3)
             logger.info("Трекинг объектов: ВКЛЮЧЕН")
         
         if self.enable_analytics:
-            self.analytics = SceneAnalytics((height, width))
+            self.analytics = SceneAnalytics((self.video_height, self.video_width))
             self.occupancy = OccupancyAnalyzer()
             logger.info("Аналитика сцены: ВКЛЮЧЕНА")
         
         if self.enable_export:
-            self.exporter = DataExporter()
-            logger.info("Экспорт данных: ВКЛЮЧЕН")
+            # Экспорт в подпапку analytics внутри run_dir
+            analytics_dir = run_dir / 'analytics'
+            self.exporter = DataExporter(output_dir=analytics_dir)
+            logger.info(f"Экспорт данных: ВКЛЮЧЕН (в {analytics_dir})")
         
         self.distance_estimator = DistanceEstimator(camera_height_m=2.0)
         
         # Настройка записи
         writer = None
         if output_path:
-            writer = self._setup_video_writer(output_path, fps, width, height)
+            writer = self._setup_video_writer(output_path, self.video_fps, self.video_width, self.video_height)
         
         # Настройка проекции на плоскость
         projection_writer = None
         projection_size = (800, 600)  # Размер проекции на плоскость
         if create_floor_projection:
-            if projection_output is None:
-                projection_output = 'output/floor_projection.mp4'
-            projection_writer = self._setup_video_writer(projection_output, fps, projection_size[0], projection_size[1])
-            logger.info(f"Проекция на плоскость: {projection_size[0]}x{projection_size[1]}")
+            projection_writer = self._setup_video_writer(projection_output, self.video_fps, projection_size[0], projection_size[1])
+            logger.info(f"Размер проекции: {projection_size[0]}x{projection_size[1]}")
         
         # Переменные для FPS
         fps_start_time = time.time()
@@ -159,7 +184,7 @@ class VideoProcessorAdvanced:
                         break
                     
                     # Временная метка
-                    frame_time = self.frame_count / fps if fps > 0 else self.frame_count
+                    frame_time = self.frame_count / self.video_fps if self.video_fps > 0 else self.frame_count
                     
                     # Детектирование объектов
                     processed_frame, detections = self._detect_objects(frame)
@@ -257,7 +282,7 @@ class VideoProcessorAdvanced:
                     if writer:
                         # Если есть панель статистики, нужно изменить размер
                         if show_stats_panel:
-                            save_frame = cv2.resize(info_frame, (width, height))
+                            save_frame = cv2.resize(info_frame, (self.video_width, self.video_height))
                         else:
                             save_frame = info_frame
                         writer.write(save_frame)
@@ -538,8 +563,11 @@ class VideoProcessorAdvanced:
                 # Простая проекция: нижняя часть экрана = ближе к камере
                 # Верх экрана = дальше от камеры
                 # Преобразуем координаты видео в координаты проекции
-                proj_x = int((x / 1920) * width)  # Предполагаем 1920 ширину видео
-                proj_y = int((y / 1080) * height)  # Предполагаем 1080 высоту видео
+                src_w = self.video_width if self.video_width > 0 else 1920
+                src_h = self.video_height if self.video_height > 0 else 1080
+                
+                proj_x = int((x / src_w) * width)
+                proj_y = int((y / src_h) * height)
                 points.append((proj_x, proj_y))
             
             # Отрисовка линии траектории (толстая линия)
@@ -625,6 +653,13 @@ class VideoProcessorAdvanced:
         """Экспорт данных трекинга"""
         logger.info("\nЭкспорт данных трекинга...")
         
+        # Параметры проекции (используем дефолтные 800x600, если не заданы другие)
+        proj_width, proj_height = 800, 600
+        
+        # Используем реальные размеры видео для нормализации
+        src_width = self.video_width if self.video_width > 0 else 1920
+        src_height = self.video_height if self.video_height > 0 else 1080
+        
         # Экспорт траекторий из трекера
         for track_id, track in self.tracker.tracks.items():
             if track['hits'] >= self.tracker.min_hits:
@@ -636,9 +671,18 @@ class VideoProcessorAdvanced:
                     'avg_speed': self.tracker.get_speed(track_id)
                 }
                 
+                # Добавляем координаты проекции в траекторию
+                extended_trajectory = []
+                for x, y, t in track['trajectory']:
+                    # Расчет проекции
+                    proj_x = int((x / src_width) * proj_width)
+                    proj_y = int((y / src_height) * proj_height)
+                    
+                    extended_trajectory.append((x, y, t, proj_x, proj_y))
+                
                 self.exporter.add_trajectory(
                     track_id,
-                    track['trajectory'],
+                    extended_trajectory,
                     class_name,
                     metadata
                 )
