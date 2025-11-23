@@ -79,7 +79,7 @@ python main.py --source input/video.mp4 --show-heatmap
 python main.py --source input/video.mp4 --show-stats-panel
 
 # Все функции вместе
-python main.py --source input/video.mp4 --output output/full.mp4 \
+python main.py --source input/video.mp4 --output output/full.mp4 
   --show-trajectories --show-heatmap --show-stats-panel
 ```
 
@@ -90,7 +90,7 @@ python main.py --source input/video.mp4 --output output/full.mp4 \
 python main.py --source input/video.mp4 --export-data --classes person
 
 # Указать директорию экспорта
-python main.py --source input/video.mp4 --export-data \
+python main.py --source input/video.mp4 --export-data 
   --export-dir output/my_analysis --classes person
 ```
 
@@ -169,11 +169,11 @@ python main.py --source 0 --output output/webcam.mp4 --no-display
 ### Анализ движения людей
 
 ```bash
-python main.py --source input/office.mp4 \
-  --output output/office_tracked.mp4 \
-  --classes person \
-  --show-trajectories \
-  --show-heatmap \
+python main.py --source input/office.mp4 
+  --output output/office_tracked.mp4 
+  --classes person 
+  --show-trajectories 
+  --show-heatmap 
   --export-data
 ```
 
@@ -185,9 +185,9 @@ python main.py --source input/office.mp4 \
 ### Мониторинг занятости помещения
 
 ```bash
-python main.py --source input/room.mp4 \
-  --classes "person,chair,couch,dining table" \
-  --show-stats-panel \
+python main.py --source input/room.mp4 
+  --classes "person,chair,couch,dining table" 
+  --show-stats-panel 
   --export-data
 ```
 
@@ -199,9 +199,9 @@ python main.py --source input/room.mp4 \
 ### Сравнение с UWB данными
 
 ```bash
-python main.py --source input/uwb_test.mp4 \
-  --classes person \
-  --export-data \
+python main.py --source input/uwb_test.mp4 
+  --classes person 
+  --export-data 
   --export-dir output/uwb_comparison
 ```
 
