@@ -1,0 +1,22 @@
+# Object Tracking & Segmentation
+torch>=2.0.0
+torchvision>=0.15.0
+numpy>=1.24.0
+opencv-python>=4.8.0
+pillow>=10.0.0
+
+# SAM 2 - Segment Anything Model 2 (Meta)
+# Установка: pip install git+https://github.com/facebookresearch/segment-anything-2.git
+
+# Visualization & UI
+matplotlib>=3.7.0
+scipy>=1.11.0
+tqdm>=4.65.0
+colorama>=0.4.6
+
+# Optional: YOLO для pose estimation
+ultralytics>=8.0.0
+
+# Optional: для GPU ускорения (если CUDA)
+# pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+
