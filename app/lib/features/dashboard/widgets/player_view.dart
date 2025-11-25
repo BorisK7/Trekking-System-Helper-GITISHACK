@@ -12,7 +12,11 @@ class PlayerView extends StatelessWidget {
     return DragTarget<String>(
       builder: (context, candidateData, rejectedData) {
         return Container(
-          color: Colors.black87,
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E1E1E),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: const Color(0xFF3C3C3C), width: 1),
+          ),
           child: Stack(
             alignment: Alignment.center,
             children: [
@@ -25,7 +29,10 @@ class PlayerView extends StatelessWidget {
                 )
               else
                 const Center(
-                  child: CircularProgressIndicator(color: Colors.white),
+                  child: CircularProgressIndicator(
+                    color: Color(0xFF4CAF50),
+                    strokeWidth: 2,
+                  ),
                 ),
 
               // Play/Pause overlay control
@@ -39,14 +46,18 @@ class PlayerView extends StatelessWidget {
                       duration: const Duration(milliseconds: 200),
                       child: Container(
                         decoration: BoxDecoration(
-                          color: Colors.black45,
+                          color: const Color(0xFF2D2D30).withOpacity(0.8),
                           shape: BoxShape.circle,
+                          border: Border.all(
+                            color: const Color(0xFF4CAF50),
+                            width: 2,
+                          ),
                         ),
                         padding: const EdgeInsets.all(16),
                         child: const Icon(
                           Icons.play_arrow,
                           size: 64,
-                          color: Colors.white,
+                          color: Color(0xFF4CAF50),
                         ),
                       ),
                     ),
@@ -57,8 +68,9 @@ class PlayerView extends StatelessWidget {
               if (candidateData.isNotEmpty)
                 Container(
                   decoration: BoxDecoration(
-                    border: Border.all(color: Colors.blueAccent, width: 4),
-                    color: Colors.blueAccent.withOpacity(0.2),
+                    border: Border.all(color: const Color(0xFF4CAF50), width: 4),
+                    color: const Color(0xFF4CAF50).withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(4),
                   ),
                   child: const Center(
                      child: Column(
@@ -67,7 +79,7 @@ class PlayerView extends StatelessWidget {
                         Icon(Icons.file_upload, size: 64, color: Colors.white),
                         SizedBox(height: 16),
                         Text(
-                          'Drop to replace',
+                          'Перетащите для замены',
                           style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
                         ),
                       ],
@@ -80,7 +92,10 @@ class PlayerView extends StatelessWidget {
       },
       onAcceptWithDetails: (details) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('File dropped: ${details.data}')),
+          SnackBar(
+            content: Text('Файл загружен: ${details.data}'),
+            backgroundColor: const Color(0xFF2D2D30),
+          ),
         );
       },
     );
